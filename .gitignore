@@ -36,7 +36,7 @@ config/projects.yaml
 status/
 config/settings.yaml
 logs/
-tooling.yaml
+config/tooling.yaml
 
 # Project details (contains client/confidential info)
 projects/
