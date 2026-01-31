@@ -28,15 +28,44 @@ OUTPUT_DIR := output
 TEST_OUTPUT_DIR := test_output
 
 TOOLING_FILE := config/tooling.yaml
-PROVIDER := $(strip $(shell if [ -f $(TOOLING_FILE) ]; then awk -F': *' '$$1=="provider"{print $$2; exit}' $(TOOLING_FILE); fi))
-ifeq ($(PROVIDER),codex)
-	AI_CLI := $(strip $(shell if [ -f $(TOOLING_FILE) ]; then awk -F': *' '$$1=="codex_binary"{print $$2; exit}' $(TOOLING_FILE); fi))
-	AI_CLI := $(if $(AI_CLI),$(AI_CLI),codex)
-else
-	PROVIDER := claude
-	AI_CLI := $(strip $(shell if [ -f $(TOOLING_FILE) ]; then awk -F': *' '$$1=="claude_binary"{print $$2; exit}' $(TOOLING_FILE); fi))
-	AI_CLI := $(if $(AI_CLI),$(AI_CLI),claude)
+
+define read_tooling_value
+$(strip $(shell if [ -f $(TOOLING_FILE) ]; then awk -F': *' '$$1=="$(1)"{print $$2; exit}' $(TOOLING_FILE); fi))
+endef
+
+default_provider := $(call read_tooling_value,provider)
+ifeq ($(default_provider),)
+	default_provider := claude
 endif
+
+role_providers := $(default_provider)
+shogun_override := $(call read_tooling_value,shogun_provider)
+ifneq ($(shogun_override),)
+	role_providers += $(shogun_override)
+endif
+karo_override := $(call read_tooling_value,karo_provider)
+ifneq ($(karo_override),)
+	role_providers += $(karo_override)
+endif
+ashigaru_override := $(call read_tooling_value,ashigaru_provider)
+ifneq ($(ashigaru_override),)
+	role_providers += $(ashigaru_override)
+endif
+
+role_providers := $(strip $(shell printf "%s\n" $(role_providers) | tr '[:upper:]' '[:lower:]' | sort -u))
+
+codex_binary := $(call read_tooling_value,codex_binary)
+codex_binary := $(if $(codex_binary),$(codex_binary),codex)
+claude_binary := $(call read_tooling_value,claude_binary)
+claude_binary := $(if $(claude_binary),$(claude_binary),claude)
+gemini_binary := $(call read_tooling_value,gemini_binary)
+gemini_binary := $(if $(gemini_binary),$(gemini_binary),gemini)
+
+define provider_binary
+$(if $(filter $(1),codex),$(codex_binary),$(if $(filter $(1),gemini),$(gemini_binary),$(claude_binary)))
+endef
+
+provider_binaries := $(strip $(foreach provider,$(role_providers),$(call provider_binary,$(provider))))
 
 START_ARGS ?=
 
@@ -105,4 +134,11 @@ doctor: ## tmux / node / npm / 選択したAI CLIが揃っているか確認
 	$(call check_tool,tmux)
 	$(call check_tool,node)
 	$(call check_tool,npm)
-	$(call check_tool,$(AI_CLI))
+	@for bin in $(provider_binaries); do \
+		if command -v $$bin >/dev/null 2>&1; then \
+			printf "✔ %-18s %s\n" "$$bin" "$$ (command -v $$bin)"; \
+		else \
+			printf "✘ %-18s not found\n" "$$bin"; \
+			exit 1; \
+		fi; \
+	done

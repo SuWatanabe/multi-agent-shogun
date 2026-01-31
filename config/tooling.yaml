@@ -1,18 +1,34 @@
 # AI CLI provider settings for multi-agent-shogun
-# You can switch between Claude Code CLI and Codex CLI.
+# You can switch between Claude Code CLI, Codex CLI, and Gemini CLI.
 #
-# provider: claude | codex
+# provider: claude | codex | gemini
 #   claude → Uses Anthropic Claude Code CLI
 #   codex  → Uses Codex CLI
+#   gemini → Uses Gemini CLI
 
 provider: codex
+
+# Optional per-role provider overrides (if omitted, uses "provider")
+# shogun_provider: claude
+# karo_provider: codex
+# ashigaru_provider: codex
 
 # Claude Code defaults
 claude_binary: claude
 claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
+claude_karo_cmd: claude --dangerously-skip-permissions
+claude_ashigaru_cmd: claude --dangerously-skip-permissions
 claude_worker_cmd: claude --dangerously-skip-permissions
 
 # Codex defaults
 codex_binary: codex
 codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
+codex_karo_cmd: codex --dangerously-bypass-approvals-and-sandbox
+codex_ashigaru_cmd: codex --dangerously-bypass-approvals-and-sandbox
 codex_worker_cmd: codex --dangerously-bypass-approvals-and-sandbox
+
+# Gemini defaults
+gemini_binary: gemini
+gemini_shogun_cmd: gemini
+gemini_karo_cmd: gemini
+gemini_ashigaru_cmd: gemini

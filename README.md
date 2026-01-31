@@ -4,7 +4,7 @@
 
 **Multi-Agent Orchestration System for Claude Code**
 
-*One command. Eight AI agents working in parallel.*
+*One command. Up to eight AI agents working in parallel (configurable).*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Claude Code](https://img.shields.io/badge/Claude-Code-blueviolet)](https://claude.ai)
@@ -21,7 +21,7 @@
 **multi-agent-shogun** is a system that runs multiple Claude Code instances simultaneously, organized like a feudal Japanese army.
 
 **Why use this?**
-- Give one command, get 8 AI workers executing in parallel
+- Give one command, get up to 8 AI workers executing in parallel (configurable)
 - No waiting - you can keep giving commands while tasks run in background
 - AI remembers your preferences across sessions (Memory MCP)
 - Real-time progress tracking via dashboard
@@ -39,10 +39,12 @@
       └──────┬──────┘
              │
     ┌─┬─┬─┬─┴─┬─┬─┬─┐
-    │1│2│3│4│5│6│7│8│  ← 8 workers execute in parallel
+    │1│2│3│4│5│6│7│8│  ← up to 8 workers execute in parallel
     └─┴─┴─┴─┴─┴─┴─┴─┘
         ASHIGARU
 ```
+
+Default is 8 Ashigaru, configurable via `config/settings.yaml` (`ashigaru.count`).
 
 ---
 
@@ -231,7 +233,7 @@ After running either option, **AI agents** will start automatically:
 |-------|------|----------|
 | 🏯 Shogun | Commander - receives your orders | 1 |
 | 📋 Karo | Manager - distributes tasks | 1 |
-| ⚔️ Ashigaru | Workers - execute tasks in parallel | 8 |
+| ⚔️ Ashigaru | Workers - execute tasks in parallel | 8 (configurable) |
 
 You'll see tmux sessions created:
 - `shogun` - Connect here to give commands
@@ -285,7 +287,7 @@ Open `dashboard.md` in your editor to see real-time status:
 
 ### ⚡ 1. Parallel Execution
 
-One command can spawn up to 8 parallel tasks:
+One command can spawn up to the configured number of parallel tasks (default 8):
 
 ```
 You: "Research 5 MCP servers"
@@ -350,11 +352,11 @@ Perfect for:
 
 | Agent | Model | Thinking | Reason |
 |-------|-------|----------|--------|
-| Shogun | Opus | Disabled | Delegation & dashboard updates don't need deep reasoning |
-| Karo | Default | Enabled | Task distribution requires careful judgment |
-| Ashigaru | Default | Enabled | Actual implementation needs full capabilities |
+| Shogun | Opus (configurable) | Disabled | Delegation & dashboard updates don't need deep reasoning |
+| Karo | Default (configurable) | Enabled | Task distribution requires careful judgment |
+| Ashigaru | Default (configurable) | Enabled | Actual implementation needs full capabilities |
 
-The Shogun uses `MAX_THINKING_TOKENS=0` to disable extended thinking, reducing latency and cost while maintaining Opus-level judgment for high-level decisions.
+The Shogun uses `MAX_THINKING_TOKENS=0` to disable extended thinking, reducing latency and cost while maintaining Opus-level judgment for high-level decisions. You can override providers and models per role in `config/tooling.yaml`.
 
 ### 📁 Context Management
 
@@ -543,23 +545,46 @@ language: ja   # Japanese only
 language: en   # Japanese + English translation
 ```
 
-### AI CLI Provider
+### Ashigaru Count
 
-Edit `config/tooling.yaml` to switch between Codex (default) and Claude Code:
+Edit `config/settings.yaml` to control how many Ashigaru workers are created:
 
 ```yaml
-provider: codex   # or claude
+ashigaru:
+  count: 8  # 1-8 recommended (tmux layout assumes 3x3 grid)
+```
+
+### AI CLI Provider (Role-Specific + Gemini Support)
+
+Edit `config/tooling.yaml` to switch providers and customize role-specific commands.
+
+```yaml
+provider: codex   # claude | codex | gemini
+
+# Optional per-role provider overrides
+shogun_provider: claude
+karo_provider: codex
+ashigaru_provider: gemini
 
 codex_binary: codex
 codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
-codex_worker_cmd: codex --dangerously-bypass-approvals-and-sandbox
+codex_karo_cmd: codex --dangerously-bypass-approvals-and-sandbox
+codex_ashigaru_cmd: codex --dangerously-bypass-approvals-and-sandbox
 
 claude_binary: claude
 claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
-claude_worker_cmd: claude --dangerously-skip-permissions
+claude_karo_cmd: claude --dangerously-skip-permissions
+claude_ashigaru_cmd: claude --dangerously-skip-permissions
+
+gemini_binary: gemini
+gemini_shogun_cmd: gemini --model <your-model>
+gemini_karo_cmd: gemini --model <your-model>
+gemini_ashigaru_cmd: gemini --model <your-model>
 ```
 
-`shutsujin_departure.sh`, `first_setup.sh`, and `make start` all read this file and launch the matching CLI. Customize the *_shogun_cmd / *_worker_cmd values if you need extra flags.
+`shutsujin_departure.sh`, `first_setup.sh`, and `make start` read this file and launch the matching CLI. Customize the role-specific *_cmd values to change models or flags.
+
+Note: `config/tooling.yaml` is the active config. `config/tooling.yaml.example` is a template—copy it over if `tooling.yaml` is missing or you want to reset to the latest defaults. Changes to the example do not apply automatically.
 
 ### Agent Guides
 
@@ -588,7 +613,7 @@ claude_worker_cmd: claude --dangerously-skip-permissions
 │      │                                                              │
 │      ├── Check/Install tmux                                         │
 │      ├── Check/Install Node.js v20+ (via nvm)                      │
-│      ├── Check/Install Claude Code CLI                              │
+│      ├── Check/Install AI CLI                                       │
 │      └── Configure Memory MCP server                                │
 │                                                                     │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -603,7 +628,7 @@ claude_worker_cmd: claude --dangerously-skip-permissions
 │      │                                                              │
 │      ├──▶ Reset queue files and dashboard                           │
 │      │                                                              │
-│      └──▶ Launch AI CLI (Codex / Claude) on all agents               │
+│      └──▶ Launch AI CLI (Codex / Claude / Gemini) on all agents      │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```

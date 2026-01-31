@@ -66,6 +66,68 @@ read_tooling_value() {
     echo "$default"
 }
 
+normalize_provider() {
+    echo "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+get_role_provider() {
+    local role="$1"
+    local role_key="${role}_provider"
+    local provider
+
+    provider=$(read_tooling_value "$role_key" "")
+    if [ -z "$provider" ]; then
+        provider=$(read_tooling_value "provider" "claude")
+    fi
+
+    normalize_provider "$provider"
+}
+
+get_provider_label() {
+    case "$1" in
+        codex) echo "Codex CLI" ;;
+        claude) echo "Claude Code CLI" ;;
+        gemini) echo "Gemini CLI" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+get_provider_binary() {
+    case "$1" in
+        codex) read_tooling_value "codex_binary" "codex" ;;
+        claude) read_tooling_value "claude_binary" "claude" ;;
+        gemini) read_tooling_value "gemini_binary" "gemini" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+get_ashigaru_count() {
+    local count="8"
+    local settings_file="$SCRIPT_DIR/config/settings.yaml"
+
+    if [ -f "$settings_file" ]; then
+        local value
+        value=$(awk '
+            $1=="ashigaru:" {in_section=1; next}
+            in_section && $1=="count:" {print $2; exit}
+        ' "$settings_file")
+        if [ -n "$value" ]; then
+            count="$value"
+        fi
+    fi
+
+    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+        count="8"
+    fi
+    if [ "$count" -lt 1 ]; then
+        count=1
+    elif [ "$count" -gt 8 ]; then
+        count=8
+    fi
+
+    echo "$count"
+}
+
 echo ""
 echo "  ╔══════════════════════════════════════════════════════════════╗"
 echo "  ║  🏯 multi-agent-shogun インストーラー                         ║"
@@ -297,35 +359,44 @@ fi
 # ============================================================
 # STEP 5: AI CLI チェック
 # ============================================================
-AI_PROVIDER=$(read_tooling_value "provider" "claude")
-AI_PROVIDER_LOWER=$(echo "$AI_PROVIDER" | tr '[:upper:]' '[:lower:]')
+log_step "STEP 5: AI CLI チェック"
 
-if [ "$AI_PROVIDER_LOWER" = "codex" ]; then
-    CLI_LABEL="Codex CLI"
-    CLI_BINARY=$(read_tooling_value "codex_binary" "codex")
-else
-    CLI_LABEL="Claude Code CLI"
-    CLI_BINARY=$(read_tooling_value "claude_binary" "claude")
-    AI_PROVIDER_LOWER="claude"
-fi
+SHOGUN_PROVIDER=$(get_role_provider "shogun")
+KARO_PROVIDER=$(get_role_provider "karo")
+ASHIGARU_PROVIDER=$(get_role_provider "ashigaru")
 
-log_step "STEP 5: $CLI_LABEL チェック (provider: $AI_PROVIDER_LOWER)"
-
-if command -v "$CLI_BINARY" &> /dev/null; then
-    if [ "$AI_PROVIDER_LOWER" = "claude" ]; then
-        CLI_VERSION=$($CLI_BINARY --version 2>/dev/null || echo "unknown")
-        log_success "$CLI_LABEL がインストール済みです"
-        log_info "バージョン: $CLI_VERSION"
-    else
-        CLI_PATH=$(command -v "$CLI_BINARY")
-        log_success "$CLI_LABEL がインストール済みです ($CLI_PATH)"
+unique_providers=()
+for provider in "$SHOGUN_PROVIDER" "$KARO_PROVIDER" "$ASHIGARU_PROVIDER"; do
+    if [ -z "$provider" ]; then
+        continue
     fi
-    RESULTS+=("$CLI_LABEL: OK")
-else
+    if [[ " ${unique_providers[*]} " != *" $provider "* ]]; then
+        unique_providers+=("$provider")
+    fi
+done
+
+for provider in "${unique_providers[@]}"; do
+    CLI_LABEL=$(get_provider_label "$provider")
+    CLI_BINARY=$(get_provider_binary "$provider")
+    log_info "確認中: $CLI_LABEL (provider: $provider)"
+
+    if command -v "$CLI_BINARY" &> /dev/null; then
+        if [ "$provider" = "claude" ]; then
+            CLI_VERSION=$($CLI_BINARY --version 2>/dev/null || echo "unknown")
+            log_success "$CLI_LABEL がインストール済みです"
+            log_info "バージョン: $CLI_VERSION"
+        else
+            CLI_PATH=$(command -v "$CLI_BINARY")
+            log_success "$CLI_LABEL がインストール済みです ($CLI_PATH)"
+        fi
+        RESULTS+=("$CLI_LABEL: OK")
+        continue
+    fi
+
     log_warn "$CLI_LABEL ($CLI_BINARY) がインストールされていません"
     echo ""
 
-    if [ "$AI_PROVIDER_LOWER" = "claude" ]; then
+    if [ "$provider" = "claude" ]; then
         if command -v npm &> /dev/null; then
             echo "  インストールコマンド:"
             echo "     npm install -g @anthropic-ai/claude-code"
@@ -359,11 +430,11 @@ else
             HAS_ERROR=true
         fi
     else
-        echo "  Codex CLI ($CLI_BINARY) をパスに追加してください"
-        RESULTS+=("Codex CLI: 未インストール")
+        echo "  ${CLI_LABEL} ($CLI_BINARY) をパスに追加してください"
+        RESULTS+=("$CLI_LABEL: 未インストール")
         HAS_ERROR=true
     fi
-fi
+done
 
 # ============================================================
 # STEP 6: ディレクトリ構造作成
@@ -427,6 +498,11 @@ language: ja
 # zsh: zsh用プロンプト
 shell: bash
 
+# 足軽人数設定
+# 1-8 推奨（tmuxの分割レイアウト前提）
+ashigaru:
+  count: 8
+
 # スキル設定
 skill:
   # スキル保存先（スキル名に shogun- プレフィックスを付けて保存）
@@ -471,12 +547,28 @@ if [ ! -f "$SCRIPT_DIR/config/tooling.yaml" ]; then
     else
         cat > "$SCRIPT_DIR/config/tooling.yaml" << 'EOF'
 provider: codex
+
+# Optional per-role overrides
+# shogun_provider: claude
+# karo_provider: codex
+# ashigaru_provider: codex
+
 claude_binary: claude
 claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
+claude_karo_cmd: claude --dangerously-skip-permissions
+claude_ashigaru_cmd: claude --dangerously-skip-permissions
 claude_worker_cmd: claude --dangerously-skip-permissions
+
 codex_binary: codex
 codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
+codex_karo_cmd: codex --dangerously-bypass-approvals-and-sandbox
+codex_ashigaru_cmd: codex --dangerously-bypass-approvals-and-sandbox
 codex_worker_cmd: codex --dangerously-bypass-approvals-and-sandbox
+
+gemini_binary: gemini
+gemini_shogun_cmd: gemini
+gemini_karo_cmd: gemini
+gemini_ashigaru_cmd: gemini
 EOF
     fi
     log_success "tooling.yaml を作成しました"
@@ -513,7 +605,8 @@ RESULTS+=("設定ファイル: OK")
 log_step "STEP 8: キューファイル初期化"
 
 # 足軽用タスクファイル作成
-for i in {1..8}; do
+ASHIGARU_COUNT=$(get_ashigaru_count)
+for i in $(seq 1 "$ASHIGARU_COUNT"); do
     TASK_FILE="$SCRIPT_DIR/queue/tasks/ashigaru${i}.yaml"
     if [ ! -f "$TASK_FILE" ]; then
         cat > "$TASK_FILE" << EOF
@@ -531,7 +624,7 @@ done
 log_info "足軽タスクファイル (1-8) を確認/作成しました"
 
 # 足軽用レポートファイル作成
-for i in {1..8}; do
+for i in $(seq 1 "$ASHIGARU_COUNT"); do
     REPORT_FILE="$SCRIPT_DIR/queue/reports/ashigaru${i}_report.yaml"
     if [ ! -f "$REPORT_FILE" ]; then
         cat > "$REPORT_FILE" << EOF

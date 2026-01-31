@@ -4,7 +4,7 @@
 
 **Claude Code マルチエージェント統率システム**
 
-*コマンド1つで、8体のAIエージェントが並列稼働*
+*コマンド1つで、最大8体のAIエージェントが並列稼働（設定可）*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Claude Code](https://img.shields.io/badge/Claude-Code-blueviolet)](https://claude.ai)
@@ -21,7 +21,7 @@
 **multi-agent-shogun** は、複数の Claude Code インスタンスを同時に実行し、戦国時代の軍制のように統率するシステムです。
 
 **なぜ使うのか？**
-- 1つの命令で、8体のAIワーカーが並列で実行
+- 1つの命令で、最大8体のAIワーカーが並列で実行（設定可）
 - 待ち時間なし - タスクがバックグラウンドで実行中も次の命令を出せる
 - AIがセッションを跨いであなたの好みを記憶（Memory MCP）
 - ダッシュボードでリアルタイム進捗確認
@@ -39,10 +39,12 @@
     └──────┬──────┘
            │
   ┌─┬─┬─┬─┴─┬─┬─┬─┐
-  │1│2│3│4│5│6│7│8│  ← 8体のワーカーが並列実行
+  │1│2│3│4│5│6│7│8│  ← 最大8体のワーカーが並列実行
   └─┴─┴─┴─┴─┴─┴─┴─┘
       ASHIGARU
 ```
+
+※ 足軽の人数は `config/settings.yaml` の `ashigaru.count` で変更できます（デフォルト8）。
 
 ---
 
@@ -231,7 +233,7 @@ wsl --install
 |-------------|------|-----|
 | 🏯 将軍（Shogun） | 総大将 - あなたの命令を受ける | 1 |
 | 📋 家老（Karo） | 管理者 - タスクを分配 | 1 |
-| ⚔️ 足軽（Ashigaru） | ワーカー - 並列でタスク実行 | 8 |
+| ⚔️ 足軽（Ashigaru） | ワーカー - 並列でタスク実行 | 8（設定可） |
 
 tmuxセッションが作成されます：
 - `shogun` - ここに接続してコマンドを出す
@@ -387,11 +389,11 @@ screenshot:
 
 | エージェント | モデル | 思考モード | 理由 |
 |-------------|--------|----------|------|
-| 将軍 | Opus | 無効 | 委譲とダッシュボード更新に深い推論は不要 |
-| 家老 | デフォルト | 有効 | タスク分配には慎重な判断が必要 |
-| 足軽 | デフォルト | 有効 | 実装作業にはフル機能が必要 |
+| 将軍 | Opus（設定可） | 無効 | 委譲とダッシュボード更新に深い推論は不要 |
+| 家老 | デフォルト（設定可） | 有効 | タスク分配には慎重な判断が必要 |
+| 足軽 | デフォルト（設定可） | 有効 | 実装作業にはフル機能が必要 |
 
-将軍は `MAX_THINKING_TOKENS=0` で拡張思考を無効化し、高レベルな判断にはOpusの能力を維持しつつ、レイテンシとコストを削減。
+将軍は `MAX_THINKING_TOKENS=0` で拡張思考を無効化し、高レベルな判断にはOpusの能力を維持しつつ、レイテンシとコストを削減。役割別のプロバイダ/モデルは `config/tooling.yaml` で上書きできます。
 
 ---
 
@@ -544,23 +546,46 @@ language: ja   # 日本語のみ
 language: en   # 日本語 + 英訳併記
 ```
 
-### AI CLI プロバイダ切り替え
+### 足軽の人数設定
 
-`config/tooling.yaml` を編集すると、デフォルトの Codex だけでなく Claude Code も選択できます：
+`config/settings.yaml` で足軽数を変更できます：
 
 ```yaml
-provider: codex   # claude に変更するとClaude Codeを起動
+ashigaru:
+  count: 8  # 1-8 推奨（tmuxの3x3レイアウト前提）
+```
+
+### AI CLI プロバイダ（役割別 + Gemini対応）
+
+`config/tooling.yaml` を編集して、プロバイダ切り替えと役割別コマンドを設定できます：
+
+```yaml
+provider: codex   # claude | codex | gemini
+
+# 役割別のプロバイダ上書き（任意）
+shogun_provider: claude
+karo_provider: codex
+ashigaru_provider: gemini
 
 codex_binary: codex
 codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
-codex_worker_cmd: codex --dangerously-bypass-approvals-and-sandbox
+codex_karo_cmd: codex --dangerously-bypass-approvals-and-sandbox
+codex_ashigaru_cmd: codex --dangerously-bypass-approvals-and-sandbox
 
 claude_binary: claude
 claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
-claude_worker_cmd: claude --dangerously-skip-permissions
+claude_karo_cmd: claude --dangerously-skip-permissions
+claude_ashigaru_cmd: claude --dangerously-skip-permissions
+
+gemini_binary: gemini
+gemini_shogun_cmd: gemini --model <your-model>
+gemini_karo_cmd: gemini --model <your-model>
+gemini_ashigaru_cmd: gemini --model <your-model>
 ```
 
-`shutsujin_departure.sh` / `first_setup.sh` / `make start` はこのファイルを読み、選択されたCLIを自動で起動します。必要に応じて *_cmd の値に追加フラグを記述してください。
+`shutsujin_departure.sh` / `first_setup.sh` / `make start` はこのファイルを読み、選択されたCLIを自動で起動します。モデル変更や追加フラグは役割別 *_cmd に設定してください。
+
+補足: 実際に参照されるのは `config/tooling.yaml` です。`config/tooling.yaml.example` はテンプレートなので、`tooling.yaml` がない場合や最新版の雛形に戻したい場合はコピーして編集してください。example を更新しても自動反映されません。
 
 ### エージェントガイド
 
@@ -589,7 +614,7 @@ claude_worker_cmd: claude --dangerously-skip-permissions
 │      │                                                              │
 │      ├── tmuxのチェック/インストール                                  │
 │      ├── Node.js v20+のチェック/インストール (nvm経由)                │
-│      ├── Claude Code CLIのチェック/インストール                      │
+│      ├── AI CLI のチェック/インストール                             │
 │      └── Memory MCPサーバー設定                                      │
 │                                                                     │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -604,7 +629,7 @@ claude_worker_cmd: claude --dangerously-skip-permissions
 │      │                                                              │
 │      ├──▶ キューファイルとダッシュボードをリセット                     │
 │      │                                                              │
-│      └──▶ 全エージェントでAI CLI（Codex/Claude）を起動                 │
+│      └──▶ 全エージェントでAI CLI（Codex/Claude/Gemini）を起動          │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
