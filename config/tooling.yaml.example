@@ -1,0 +1,18 @@
+# AI CLI provider settings for multi-agent-shogun
+# You can switch between Claude Code CLI and Codex CLI.
+#
+# provider: claude | codex
+#   claude → Uses Anthropic Claude Code CLI
+#   codex  → Uses Codex CLI
+
+provider: codex
+
+# Claude Code defaults
+claude_binary: claude
+claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
+claude_worker_cmd: claude --dangerously-skip-permissions
+
+# Codex defaults
+codex_binary: codex
+codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
+codex_worker_cmd: codex --dangerously-bypass-approvals-and-sandbox

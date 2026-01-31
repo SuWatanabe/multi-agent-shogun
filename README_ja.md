@@ -544,6 +544,30 @@ language: ja   # 日本語のみ
 language: en   # 日本語 + 英訳併記
 ```
 
+### AI CLI プロバイダ切り替え
+
+`config/tooling.yaml` を編集すると、デフォルトの Codex だけでなく Claude Code も選択できます：
+
+```yaml
+provider: codex   # claude に変更するとClaude Codeを起動
+
+codex_binary: codex
+codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
+codex_worker_cmd: codex --dangerously-bypass-approvals-and-sandbox
+
+claude_binary: claude
+claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
+claude_worker_cmd: claude --dangerously-skip-permissions
+```
+
+`shutsujin_departure.sh` / `first_setup.sh` / `make start` はこのファイルを読み、選択されたCLIを自動で起動します。必要に応じて *_cmd の値に追加フラグを記述してください。
+
+### エージェントガイド
+
+- `AGENT_GUIDE.md`: AIに依存しない共通ルール。将軍/家老/足軽の全員が読む想定。
+- `CLAUDE.md`: Claude Code セッション向けの補助資料。
+- `CODEX.md`: Codex セッション向けの補助資料。
+
 ---
 
 ## 🛠️ 上級者向け
@@ -580,7 +604,7 @@ language: en   # 日本語 + 英訳併記
 │      │                                                              │
 │      ├──▶ キューファイルとダッシュボードをリセット                     │
 │      │                                                              │
-│      └──▶ 全エージェントでClaude Codeを起動                          │
+│      └──▶ 全エージェントでAI CLI（Codex/Claude）を起動                 │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -591,10 +615,10 @@ language: en   # 日本語 + 英訳併記
 <summary><b>shutsujin_departure.sh オプション</b>（クリックで展開）</summary>
 
 ```bash
-# デフォルト: フル起動（tmuxセッション + Claude Code起動）
+# デフォルト: フル起動（tmuxセッション + AI CLI 起動）
 ./shutsujin_departure.sh
 
-# セッションセットアップのみ（Claude Code起動なし）
+# セッションセットアップのみ（AI CLI 起動なし）
 ./shutsujin_departure.sh -s
 ./shutsujin_departure.sh --setup-only
 
@@ -622,8 +646,12 @@ tmux attach-session -t shogun     # 接続してコマンドを出す
 ```bash
 ./shutsujin_departure.sh -s       # セッションのみ作成
 
-# 特定のエージェントでClaude Codeを手動起動
-tmux send-keys -t shogun:0 'claude --dangerously-skip-permissions' Enter
+# Codex（provider: codex）の場合
+tmux send-keys -t shogun:0 'codex --dangerously-bypass-approvals-and-sandbox' Enter
+tmux send-keys -t multiagent:0.0 'codex --dangerously-bypass-approvals-and-sandbox' Enter
+
+# Claude Code（provider: claude）の場合
+tmux send-keys -t shogun:0 'MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions' Enter
 tmux send-keys -t multiagent:0.0 'claude --dangerously-skip-permissions' Enter
 ```
 

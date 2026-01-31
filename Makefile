@@ -27,6 +27,17 @@ DEMO_DIR := demo_output
 OUTPUT_DIR := output
 TEST_OUTPUT_DIR := test_output
 
+TOOLING_FILE := config/tooling.yaml
+PROVIDER := $(strip $(shell if [ -f $(TOOLING_FILE) ]; then awk -F': *' '$$1=="provider"{print $$2; exit}' $(TOOLING_FILE); fi))
+ifeq ($(PROVIDER),codex)
+	AI_CLI := $(strip $(shell if [ -f $(TOOLING_FILE) ]; then awk -F': *' '$$1=="codex_binary"{print $$2; exit}' $(TOOLING_FILE); fi))
+	AI_CLI := $(if $(AI_CLI),$(AI_CLI),codex)
+else
+	PROVIDER := claude
+	AI_CLI := $(strip $(shell if [ -f $(TOOLING_FILE) ]; then awk -F': *' '$$1=="claude_binary"{print $$2; exit}' $(TOOLING_FILE); fi))
+	AI_CLI := $(if $(AI_CLI),$(AI_CLI),claude)
+endif
+
 START_ARGS ?=
 
 .PHONY: help bootstrap start setup-only terminal kill attach-shogun attach-multiagent \
@@ -90,8 +101,8 @@ define check_tool
 	fi
 endef
 
-doctor: ## tmux / node / npm / claude CLI が揃っているか確認
+doctor: ## tmux / node / npm / 選択したAI CLIが揃っているか確認
 	$(call check_tool,tmux)
 	$(call check_tool,node)
 	$(call check_tool,npm)
-	$(call check_tool,claude)
+	$(call check_tool,$(AI_CLI))

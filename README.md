@@ -543,6 +543,30 @@ language: ja   # Japanese only
 language: en   # Japanese + English translation
 ```
 
+### AI CLI Provider
+
+Edit `config/tooling.yaml` to switch between Codex (default) and Claude Code:
+
+```yaml
+provider: codex   # or claude
+
+codex_binary: codex
+codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
+codex_worker_cmd: codex --dangerously-bypass-approvals-and-sandbox
+
+claude_binary: claude
+claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
+claude_worker_cmd: claude --dangerously-skip-permissions
+```
+
+`shutsujin_departure.sh`, `first_setup.sh`, and `make start` all read this file and launch the matching CLI. Customize the *_shogun_cmd / *_worker_cmd values if you need extra flags.
+
+### Agent Guides
+
+- `AGENT_GUIDE.md`: AIに依存しない共通手順書。将軍/家老/足軽の誰でも参照できる基礎ルール集。
+- `CLAUDE.md`: Claude Code セッション専用の補助資料。
+- `CODEX.md`: OpenAI Codex セッション専用の補助資料。
+
 ---
 
 ## 🛠️ Advanced Usage
@@ -579,7 +603,7 @@ language: en   # Japanese + English translation
 │      │                                                              │
 │      ├──▶ Reset queue files and dashboard                           │
 │      │                                                              │
-│      └──▶ Launch Claude Code on all agents                          │
+│      └──▶ Launch AI CLI (Codex / Claude) on all agents               │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -590,10 +614,10 @@ language: en   # Japanese + English translation
 <summary><b>shutsujin_departure.sh Options</b> (Click to expand)</summary>
 
 ```bash
-# Default: Full startup (tmux sessions + Claude Code launch)
+# Default: Full startup (tmux sessions + AI CLI launch)
 ./shutsujin_departure.sh
 
-# Session setup only (without launching Claude Code)
+# Session setup only (without launching the AI CLI)
 ./shutsujin_departure.sh -s
 ./shutsujin_departure.sh --setup-only
 
@@ -621,8 +645,12 @@ tmux attach-session -t shogun     # Connect to give commands
 ```bash
 ./shutsujin_departure.sh -s       # Create sessions only
 
-# Manually start Claude Code on specific agents
-tmux send-keys -t shogun:0 'claude --dangerously-skip-permissions' Enter
+# Manually start Codex (default)
+tmux send-keys -t shogun:0 'codex --dangerously-bypass-approvals-and-sandbox' Enter
+tmux send-keys -t multiagent:0.0 'codex --dangerously-bypass-approvals-and-sandbox' Enter
+
+# If config/tooling.yaml sets provider: claude
+tmux send-keys -t shogun:0 'MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions' Enter
 tmux send-keys -t multiagent:0.0 'claude --dangerously-skip-permissions' Enter
 ```
 

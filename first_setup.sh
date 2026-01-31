@@ -48,6 +48,24 @@ cd "$SCRIPT_DIR"
 RESULTS=()
 HAS_ERROR=false
 
+TOOLING_FILE="$SCRIPT_DIR/config/tooling.yaml"
+
+read_tooling_value() {
+    local key="$1"
+    local default="$2"
+
+    if [ -f "$TOOLING_FILE" ]; then
+        local value
+        value=$(grep -E "^$key:" "$TOOLING_FILE" 2>/dev/null | head -n 1 | cut -d':' -f2- | xargs)
+        if [ -n "$value" ]; then
+            echo "$value"
+            return
+        fi
+    fi
+
+    echo "$default"
+}
+
 echo ""
 echo "  ╔══════════════════════════════════════════════════════════════╗"
 echo "  ║  🏯 multi-agent-shogun インストーラー                         ║"
@@ -277,50 +295,72 @@ else
 fi
 
 # ============================================================
-# STEP 5: Claude Code CLI チェック
+# STEP 5: AI CLI チェック
 # ============================================================
-log_step "STEP 5: Claude Code CLI チェック"
+AI_PROVIDER=$(read_tooling_value "provider" "claude")
+AI_PROVIDER_LOWER=$(echo "$AI_PROVIDER" | tr '[:upper:]' '[:lower:]')
 
-if command -v claude &> /dev/null; then
-    # バージョン取得を試みる
-    CLAUDE_VERSION=$(claude --version 2>/dev/null || echo "unknown")
-    log_success "Claude Code CLI がインストール済みです"
-    log_info "バージョン: $CLAUDE_VERSION"
-    RESULTS+=("Claude Code CLI: OK")
+if [ "$AI_PROVIDER_LOWER" = "codex" ]; then
+    CLI_LABEL="Codex CLI"
+    CLI_BINARY=$(read_tooling_value "codex_binary" "codex")
 else
-    log_warn "Claude Code CLI がインストールされていません"
+    CLI_LABEL="Claude Code CLI"
+    CLI_BINARY=$(read_tooling_value "claude_binary" "claude")
+    AI_PROVIDER_LOWER="claude"
+fi
+
+log_step "STEP 5: $CLI_LABEL チェック (provider: $AI_PROVIDER_LOWER)"
+
+if command -v "$CLI_BINARY" &> /dev/null; then
+    if [ "$AI_PROVIDER_LOWER" = "claude" ]; then
+        CLI_VERSION=$($CLI_BINARY --version 2>/dev/null || echo "unknown")
+        log_success "$CLI_LABEL がインストール済みです"
+        log_info "バージョン: $CLI_VERSION"
+    else
+        CLI_PATH=$(command -v "$CLI_BINARY")
+        log_success "$CLI_LABEL がインストール済みです ($CLI_PATH)"
+    fi
+    RESULTS+=("$CLI_LABEL: OK")
+else
+    log_warn "$CLI_LABEL ($CLI_BINARY) がインストールされていません"
     echo ""
 
-    if command -v npm &> /dev/null; then
-        echo "  インストールコマンド:"
-        echo "     npm install -g @anthropic-ai/claude-code"
-        echo ""
-        if [ ! -t 0 ]; then
-            REPLY="Y"
-        else
-            read -p "  今すぐインストールしますか? [Y/n]: " REPLY
-        fi
-        REPLY=${REPLY:-Y}
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            log_info "Claude Code CLI をインストール中..."
-            npm install -g @anthropic-ai/claude-code
-
-            if command -v claude &> /dev/null; then
-                log_success "Claude Code CLI インストール完了"
-                RESULTS+=("Claude Code CLI: インストール完了")
+    if [ "$AI_PROVIDER_LOWER" = "claude" ]; then
+        if command -v npm &> /dev/null; then
+            echo "  インストールコマンド:"
+            echo "     npm install -g @anthropic-ai/claude-code"
+            echo ""
+            if [ ! -t 0 ]; then
+                REPLY="Y"
             else
-                log_error "インストールに失敗しました。パスを確認してください"
-                RESULTS+=("Claude Code CLI: インストール失敗")
+                read -p "  今すぐインストールしますか? [Y/n]: " REPLY
+            fi
+            REPLY=${REPLY:-Y}
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                log_info "Claude Code CLI をインストール中..."
+                npm install -g @anthropic-ai/claude-code
+
+                if command -v "$CLI_BINARY" &> /dev/null; then
+                    log_success "Claude Code CLI インストール完了"
+                    RESULTS+=("Claude Code CLI: インストール完了")
+                else
+                    log_error "インストールに失敗しました。パスを確認してください"
+                    RESULTS+=("Claude Code CLI: インストール失敗")
+                    HAS_ERROR=true
+                fi
+            else
+                log_warn "インストールをスキップしました"
+                RESULTS+=("Claude Code CLI: 未インストール (スキップ)")
                 HAS_ERROR=true
             fi
         else
-            log_warn "インストールをスキップしました"
-            RESULTS+=("Claude Code CLI: 未インストール (スキップ)")
+            echo "  npm がインストールされていないため、先に Node.js をインストールしてください"
+            RESULTS+=("Claude Code CLI: 未インストール (npm必要)")
             HAS_ERROR=true
         fi
     else
-        echo "  npm がインストールされていないため、先に Node.js をインストールしてください"
-        RESULTS+=("Claude Code CLI: 未インストール (npm必要)")
+        echo "  Codex CLI ($CLI_BINARY) をパスに追加してください"
+        RESULTS+=("Codex CLI: 未インストール")
         HAS_ERROR=true
     fi
 fi
@@ -421,6 +461,27 @@ EOF
     log_success "projects.yaml を作成しました"
 else
     log_info "config/projects.yaml は既に存在します"
+fi
+
+# config/tooling.yaml
+if [ ! -f "$SCRIPT_DIR/config/tooling.yaml" ]; then
+    log_info "config/tooling.yaml を作成中..."
+    if [ -f "$SCRIPT_DIR/config/tooling.yaml.example" ]; then
+        cp "$SCRIPT_DIR/config/tooling.yaml.example" "$SCRIPT_DIR/config/tooling.yaml"
+    else
+        cat > "$SCRIPT_DIR/config/tooling.yaml" << 'EOF'
+provider: codex
+claude_binary: claude
+claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
+claude_worker_cmd: claude --dangerously-skip-permissions
+codex_binary: codex
+codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
+codex_worker_cmd: codex --dangerously-bypass-approvals-and-sandbox
+EOF
+    fi
+    log_success "tooling.yaml を作成しました"
+else
+    log_info "config/tooling.yaml は既に存在します"
 fi
 
 # memory/global_context.md（システム全体のコンテキスト）

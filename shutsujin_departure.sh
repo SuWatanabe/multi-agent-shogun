@@ -4,7 +4,7 @@
 #
 # 使用方法:
 #   ./shutsujin_departure.sh           # 全エージェント起動（通常）
-#   ./shutsujin_departure.sh -s        # セットアップのみ（Claude起動なし）
+#   ./shutsujin_departure.sh -s        # セットアップのみ（AI CLI起動なし）
 #   ./shutsujin_departure.sh -h        # ヘルプ表示
 
 set -e
@@ -69,6 +69,43 @@ generate_prompt() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# AI CLI 設定読込
+# ═══════════════════════════════════════════════════════════════════════════════
+TOOLING_CONFIG="./config/tooling.yaml"
+
+read_tooling_value() {
+    local key="$1"
+    local default="$2"
+
+    if [ -f "$TOOLING_CONFIG" ]; then
+        local value
+        value=$(grep -E "^$key:" "$TOOLING_CONFIG" 2>/dev/null | head -n 1 | cut -d':' -f2- | xargs)
+        if [ -n "$value" ]; then
+            echo "$value"
+            return
+        fi
+    fi
+
+    echo "$default"
+}
+
+AI_PROVIDER=$(read_tooling_value "provider" "claude")
+AI_PROVIDER_LOWER=$(echo "$AI_PROVIDER" | tr '[:upper:]' '[:lower:]')
+
+if [ "$AI_PROVIDER_LOWER" = "codex" ]; then
+    AI_PROVIDER_LABEL="Codex"
+    AI_BINARY=$(read_tooling_value "codex_binary" "codex")
+    SHOGUN_CLI_CMD=$(read_tooling_value "codex_shogun_cmd" "codex --dangerously-skip-permissions")
+    WORKER_CLI_CMD=$(read_tooling_value "codex_worker_cmd" "codex --dangerously-skip-permissions")
+else
+    AI_PROVIDER_LABEL="Claude Code"
+    AI_BINARY=$(read_tooling_value "claude_binary" "claude")
+    SHOGUN_CLI_CMD=$(read_tooling_value "claude_shogun_cmd" "MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions")
+    WORKER_CLI_CMD=$(read_tooling_value "claude_worker_cmd" "claude --dangerously-skip-permissions")
+    AI_PROVIDER_LOWER="claude"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # オプション解析
 # ═══════════════════════════════════════════════════════════════════════════════
 SETUP_ONLY=false
@@ -101,7 +138,7 @@ while [[ $# -gt 0 ]]; do
             echo "使用方法: ./shutsujin_departure.sh [オプション]"
             echo ""
             echo "オプション:"
-            echo "  -s, --setup-only    tmuxセッションのセットアップのみ（Claude起動なし）"
+            echo "  -s, --setup-only    tmuxセッションのセットアップのみ（AI CLI起動なし）"
             echo "  -t, --terminal      Windows Terminal で新しいタブを開く"
             echo "  -shell, --shell SH  シェルを指定（bash または zsh）"
             echo "                      未指定時は config/settings.yaml の設定を使用"
@@ -109,7 +146,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "例:"
             echo "  ./shutsujin_departure.sh              # 全エージェント起動（通常の出陣）"
-            echo "  ./shutsujin_departure.sh -s           # セットアップのみ（手動でClaude起動）"
+            echo "  ./shutsujin_departure.sh -s           # セットアップのみ（手動でAI CLI起動）"
             echo "  ./shutsujin_departure.sh -t           # 全エージェント起動 + ターミナルタブ展開"
             echo "  ./shutsujin_departure.sh -shell bash  # bash用プロンプトで起動"
             echo "  ./shutsujin_departure.sh -shell zsh   # zsh用プロンプトで起動"
@@ -479,21 +516,20 @@ log_success "  └─ 将軍の本陣、構築完了"
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 6: Claude Code 起動（--setup-only でスキップ）
+# STEP 6: AI CLI 起動（--setup-only でスキップ）
 # ═══════════════════════════════════════════════════════════════════════════════
 if [ "$SETUP_ONLY" = false ]; then
-    # Claude Code CLI の存在チェック
-    if ! command -v claude &> /dev/null; then
-        log_info "⚠️  claude コマンドが見つかりません"
-        echo "  first_setup.sh を再実行してください:"
-        echo "    ./first_setup.sh"
+    if ! command -v "$AI_BINARY" &> /dev/null; then
+        log_info "⚠️  ${AI_BINARY} コマンドが見つかりません (${AI_PROVIDER_LABEL} CLI)"
+        echo "  config/tooling.yaml の provider 設定と CLI インストール状況をご確認ください。"
+        echo "  first_setup.sh を再実行するか、該当CLIをパスに追加してください。"
         exit 1
     fi
 
-    log_war "👑 全軍に Claude Code を召喚中..."
+    log_war "👑 全軍に ${AI_PROVIDER_LABEL} CLI を召喚中..."
 
     # 将軍
-    tmux send-keys -t shogun "MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions"
+    tmux send-keys -t shogun "$SHOGUN_CLI_CMD"
     tmux send-keys -t shogun Enter
     log_info "  └─ 将軍、召喚完了"
 
@@ -502,12 +538,12 @@ if [ "$SETUP_ONLY" = false ]; then
 
     # 家老 + 足軽（9ペイン）
     for i in {0..8}; do
-        tmux send-keys -t "multiagent:0.$i" "claude --dangerously-skip-permissions"
+        tmux send-keys -t "multiagent:0.$i" "$WORKER_CLI_CMD"
         tmux send-keys -t "multiagent:0.$i" Enter
     done
     log_info "  └─ 家老・足軽、召喚完了"
 
-    log_success "✅ 全軍 Claude Code 起動完了"
+    log_success "✅ 全軍 ${AI_PROVIDER_LABEL} 起動完了"
     echo ""
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -581,16 +617,21 @@ NINJA_EOF
     echo -e "                               \033[0;36m[ASCII Art: syntax-samurai/ryu - CC0 1.0 Public Domain]\033[0m"
     echo ""
 
-    echo "  Claude Code の起動を待機中（最大30秒）..."
+    if [ "$AI_PROVIDER_LOWER" = "claude" ]; then
+        echo "  ${AI_PROVIDER_LABEL} の起動を待機中（最大30秒）..."
 
-    # 将軍の起動を確認（最大30秒待機）
-    for i in {1..30}; do
-        if tmux capture-pane -t shogun -p | grep -q "bypass permissions"; then
-            echo "  └─ 将軍の Claude Code 起動確認完了（${i}秒）"
-            break
-        fi
-        sleep 1
-    done
+        # 将軍の起動を確認（最大30秒待機）
+        for i in {1..30}; do
+            if tmux capture-pane -t shogun -p | grep -q "bypass permissions"; then
+                echo "  └─ 将軍の ${AI_PROVIDER_LABEL} 起動確認完了（${i}秒）"
+                break
+            fi
+            sleep 1
+        done
+    else
+        echo "  ${AI_PROVIDER_LABEL} CLI の起動を確認中..."
+        sleep 2
+    fi
 
     # 将軍に指示書を読み込ませる
     log_info "  └─ 将軍に指示書を伝達中..."
@@ -658,17 +699,17 @@ echo "  ╚═══════════════════════
 echo ""
 
 if [ "$SETUP_ONLY" = true ]; then
-    echo "  ⚠️  セットアップのみモード: Claude Codeは未起動です"
+    echo "  ⚠️  セットアップのみモード: ${AI_PROVIDER_LABEL} CLI は未起動です"
     echo ""
-    echo "  手動でClaude Codeを起動するには:"
+    echo "  手動で${AI_PROVIDER_LABEL} CLI を起動するには:"
     echo "  ┌──────────────────────────────────────────────────────────┐"
     echo "  │  # 将軍を召喚                                            │"
-    echo "  │  tmux send-keys -t shogun 'claude --dangerously-skip-permissions' Enter │"
+    echo "  │  tmux send-keys -t shogun '$SHOGUN_CLI_CMD' Enter"
     echo "  │                                                          │"
     echo "  │  # 家老・足軽を一斉召喚                                   │"
     echo "  │  for i in {0..8}; do \\                                   │"
     echo "  │    tmux send-keys -t multiagent:0.\$i \\                   │"
-    echo "  │      'claude --dangerously-skip-permissions' Enter       │"
+    echo "  │      '$WORKER_CLI_CMD' Enter                             │"
     echo "  │  done                                                    │"
     echo "  └──────────────────────────────────────────────────────────┘"
     echo ""
