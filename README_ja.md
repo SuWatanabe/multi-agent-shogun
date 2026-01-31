@@ -393,7 +393,7 @@ screenshot:
 | 家老 | デフォルト（設定可） | 有効 | タスク分配には慎重な判断が必要 |
 | 足軽 | デフォルト（設定可） | 有効 | 実装作業にはフル機能が必要 |
 
-将軍は `MAX_THINKING_TOKENS=0` で拡張思考を無効化し、高レベルな判断にはOpusの能力を維持しつつ、レイテンシとコストを削減。役割別のプロバイダ/モデルは `config/tooling.yaml` で上書きできます。
+将軍は `MAX_THINKING_TOKENS=0` で拡張思考を無効化し、高レベルな判断にはOpusの能力を維持しつつ、レイテンシとコストを削減。役割別のプロバイダ/モデルは `config/settings.yaml` の `ai_cli` セクションで上書きできます。
 
 ---
 
@@ -557,35 +557,32 @@ ashigaru:
 
 ### AI CLI プロバイダ（役割別 + Gemini対応）
 
-`config/tooling.yaml` を編集して、プロバイダ切り替えと役割別コマンドを設定できます：
+`config/settings.yaml` の `ai_cli` セクションを編集して、プロバイダ切り替えと役割別コマンドを設定できます：
 
 ```yaml
-provider: codex   # claude | codex | gemini
+ai_cli:
+  provider: codex   # claude | codex | gemini
+  shogun_provider:
+  karo_provider:
+  ashigaru_provider:
 
-# 役割別のプロバイダ上書き（任意）
-shogun_provider: claude
-karo_provider: codex
-ashigaru_provider: gemini
+  codex_binary: codex
+  codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
+  codex_karo_cmd: codex --dangerously-bypass-approvals-and-sandbox
+  codex_ashigaru_cmd: codex --dangerously-bypass-approvals-and-sandbox
 
-codex_binary: codex
-codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
-codex_karo_cmd: codex --dangerously-bypass-approvals-and-sandbox
-codex_ashigaru_cmd: codex --dangerously-bypass-approvals-and-sandbox
+  claude_binary: claude
+  claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
+  claude_karo_cmd: claude --dangerously-skip-permissions
+  claude_ashigaru_cmd: claude --dangerously-skip-permissions
 
-claude_binary: claude
-claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
-claude_karo_cmd: claude --dangerously-skip-permissions
-claude_ashigaru_cmd: claude --dangerously-skip-permissions
-
-gemini_binary: gemini
-gemini_shogun_cmd: gemini --model <your-model>
-gemini_karo_cmd: gemini --model <your-model>
-gemini_ashigaru_cmd: gemini --model <your-model>
+  gemini_binary: gemini
+  gemini_shogun_cmd: gemini --model <your-model>
+  gemini_karo_cmd: gemini --model <your-model>
+  gemini_ashigaru_cmd: gemini --model <your-model>
 ```
 
-`shutsujin_departure.sh` / `first_setup.sh` / `make start` はこのファイルを読み、選択されたCLIを自動で起動します。モデル変更や追加フラグは役割別 *_cmd に設定してください。
-
-補足: 実際に参照されるのは `config/tooling.yaml` です。`config/tooling.yaml.example` はテンプレートなので、`tooling.yaml` がない場合や最新版の雛形に戻したい場合はコピーして編集してください。example を更新しても自動反映されません。
+`shutsujin_departure.sh` / `first_setup.sh` / `make start` はこの設定を読み、選択されたCLIを自動で起動します。モデル変更や追加フラグは役割別 *_cmd に設定してください。
 
 ### エージェントガイド
 
@@ -671,11 +668,11 @@ tmux attach-session -t shogun     # 接続してコマンドを出す
 ```bash
 ./shutsujin_departure.sh -s       # セッションのみ作成
 
-# Codex（provider: codex）の場合
+# Codex（ai_cli.provider: codex）の場合
 tmux send-keys -t shogun:0 'codex --dangerously-bypass-approvals-and-sandbox' Enter
 tmux send-keys -t multiagent:0.0 'codex --dangerously-bypass-approvals-and-sandbox' Enter
 
-# Claude Code（provider: claude）の場合
+# Claude Code（ai_cli.provider: claude）の場合
 tmux send-keys -t shogun:0 'MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions' Enter
 tmux send-keys -t multiagent:0.0 'claude --dangerously-skip-permissions' Enter
 ```

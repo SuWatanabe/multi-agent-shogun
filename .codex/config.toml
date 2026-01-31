@@ -1,0 +1,12 @@
+# Codex CLI configuration
+# See `codex --help config` for details. Adjust model/search behavior below.
+
+model = "gpt-5.2-codex"
+web_search = "live"  # "live", "cached", or "disabled"
+max_output_tokens = 4096
+
+[ui]
+show_banner = true
+
+[logging]
+level = "info"

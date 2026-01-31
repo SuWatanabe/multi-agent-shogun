@@ -44,26 +44,40 @@ log_step() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+SETTINGS_FILE="$SCRIPT_DIR/config/settings.yaml"
+
 # 結果追跡用変数
 RESULTS=()
 HAS_ERROR=false
 
-TOOLING_FILE="$SCRIPT_DIR/config/tooling.yaml"
-
-read_tooling_value() {
+read_ai_cli_value() {
     local key="$1"
     local default="$2"
+    local value=""
 
-    if [ -f "$TOOLING_FILE" ]; then
-        local value
-        value=$(grep -E "^$key:" "$TOOLING_FILE" 2>/dev/null | head -n 1 | cut -d':' -f2- | xargs)
-        if [ -n "$value" ]; then
-            echo "$value"
-            return
-        fi
+    if [ -f "$SETTINGS_FILE" ]; then
+        value=$(
+            awk -v key="$key" '
+                /^[[:space:]]*#/ {next}
+                /^ai_cli:/ {in_cli=1; next}
+                in_cli && /^[^[:space:]]/ {in_cli=0}
+                in_cli && NF==0 {next}
+                in_cli && $1 == key":" {
+                    $1=""
+                    sub(/^[[:space:]]+/, "")
+                    gsub(/[[:space:]]+$/, "")
+                    print
+                    exit
+                }
+            ' "$SETTINGS_FILE"
+        )
     fi
 
-    echo "$default"
+    if [ -n "$value" ]; then
+        echo "$value"
+    else
+        echo "$default"
+    fi
 }
 
 normalize_provider() {
@@ -75,9 +89,9 @@ get_role_provider() {
     local role_key="${role}_provider"
     local provider
 
-    provider=$(read_tooling_value "$role_key" "")
+    provider=$(read_ai_cli_value "$role_key" "")
     if [ -z "$provider" ]; then
-        provider=$(read_tooling_value "provider" "claude")
+        provider=$(read_ai_cli_value "provider" "claude")
     fi
 
     normalize_provider "$provider"
@@ -94,9 +108,9 @@ get_provider_label() {
 
 get_provider_binary() {
     case "$1" in
-        codex) read_tooling_value "codex_binary" "codex" ;;
-        claude) read_tooling_value "claude_binary" "claude" ;;
-        gemini) read_tooling_value "gemini_binary" "gemini" ;;
+        codex) read_ai_cli_value "codex_binary" "codex" ;;
+        claude) read_ai_cli_value "claude_binary" "claude" ;;
+        gemini) read_ai_cli_value "gemini_binary" "gemini" ;;
         *) echo "$1" ;;
     esac
 }
@@ -498,6 +512,28 @@ language: ja
 # zsh: zsh用プロンプト
 shell: bash
 
+# AI CLI 設定
+ai_cli:
+  provider: codex
+  shogun_provider:
+  karo_provider:
+  ashigaru_provider:
+
+  claude_binary: claude
+  claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
+  claude_karo_cmd: claude --dangerously-skip-permissions
+  claude_ashigaru_cmd: claude --dangerously-skip-permissions
+
+  codex_binary: codex
+  codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
+  codex_karo_cmd: codex --dangerously-bypass-approvals-and-sandbox
+  codex_ashigaru_cmd: codex --dangerously-bypass-approvals-and-sandbox
+
+  gemini_binary: gemini
+  gemini_shogun_cmd: gemini
+  gemini_karo_cmd: gemini
+  gemini_ashigaru_cmd: gemini
+
 # 足軽人数設定
 # 1-8 推奨（tmuxの分割レイアウト前提）
 ashigaru:
@@ -537,43 +573,6 @@ EOF
     log_success "projects.yaml を作成しました"
 else
     log_info "config/projects.yaml は既に存在します"
-fi
-
-# config/tooling.yaml
-if [ ! -f "$SCRIPT_DIR/config/tooling.yaml" ]; then
-    log_info "config/tooling.yaml を作成中..."
-    if [ -f "$SCRIPT_DIR/config/tooling.yaml.example" ]; then
-        cp "$SCRIPT_DIR/config/tooling.yaml.example" "$SCRIPT_DIR/config/tooling.yaml"
-    else
-        cat > "$SCRIPT_DIR/config/tooling.yaml" << 'EOF'
-provider: codex
-
-# Optional per-role overrides
-# shogun_provider: claude
-# karo_provider: codex
-# ashigaru_provider: codex
-
-claude_binary: claude
-claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
-claude_karo_cmd: claude --dangerously-skip-permissions
-claude_ashigaru_cmd: claude --dangerously-skip-permissions
-claude_worker_cmd: claude --dangerously-skip-permissions
-
-codex_binary: codex
-codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
-codex_karo_cmd: codex --dangerously-bypass-approvals-and-sandbox
-codex_ashigaru_cmd: codex --dangerously-bypass-approvals-and-sandbox
-codex_worker_cmd: codex --dangerously-bypass-approvals-and-sandbox
-
-gemini_binary: gemini
-gemini_shogun_cmd: gemini
-gemini_karo_cmd: gemini
-gemini_ashigaru_cmd: gemini
-EOF
-    fi
-    log_success "tooling.yaml を作成しました"
-else
-    log_info "config/tooling.yaml は既に存在します"
 fi
 
 # memory/global_context.md（システム全体のコンテキスト）

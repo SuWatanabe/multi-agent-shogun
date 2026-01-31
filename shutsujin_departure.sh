@@ -25,6 +25,8 @@ if [ -f "./config/settings.yaml" ]; then
     SHELL_SETTING=$(grep "^shell:" ./config/settings.yaml 2>/dev/null | awk '{print $2}' || echo "bash")
 fi
 
+SETTINGS_FILE="./config/settings.yaml"
+
 # 足軽人数を読み取り（デフォルト: 8）
 ASHIGARU_COUNT="8"
 if [ -f "./config/settings.yaml" ]; then
@@ -92,22 +94,34 @@ generate_prompt() {
 # ═══════════════════════════════════════════════════════════════════════════════
 # AI CLI 設定読込
 # ═══════════════════════════════════════════════════════════════════════════════
-TOOLING_CONFIG="./config/tooling.yaml"
-
-read_tooling_value() {
+read_ai_cli_value() {
     local key="$1"
     local default="$2"
+    local value=""
 
-    if [ -f "$TOOLING_CONFIG" ]; then
-        local value
-        value=$(grep -E "^$key:" "$TOOLING_CONFIG" 2>/dev/null | head -n 1 | cut -d':' -f2- | xargs)
-        if [ -n "$value" ]; then
-            echo "$value"
-            return
-        fi
+    if [ -f "$SETTINGS_FILE" ]; then
+        value=$(
+            awk -v key="$key" '
+                /^[[:space:]]*#/ {next}
+                /^ai_cli:/ {in_cli=1; next}
+                in_cli && /^[^[:space:]]/ {in_cli=0}
+                in_cli && NF==0 {next}
+                in_cli && $1 == key":" {
+                    $1=""
+                    sub(/^[[:space:]]+/, "")
+                    gsub(/[[:space:]]+$/, "")
+                    print
+                    exit
+                }
+            ' "$SETTINGS_FILE"
+        )
     fi
 
-    echo "$default"
+    if [ -n "$value" ]; then
+        echo "$value"
+    else
+        echo "$default"
+    fi
 }
 
 normalize_provider() {
@@ -119,9 +133,9 @@ get_role_provider() {
     local role_key="${role}_provider"
     local provider
 
-    provider=$(read_tooling_value "$role_key" "")
+    provider=$(read_ai_cli_value "$role_key" "")
     if [ -z "$provider" ]; then
-        provider=$(read_tooling_value "provider" "claude")
+        provider=$(read_ai_cli_value "provider" "claude")
     fi
 
     normalize_provider "$provider"
@@ -138,9 +152,9 @@ get_provider_label() {
 
 get_provider_binary() {
     case "$1" in
-        codex) read_tooling_value "codex_binary" "codex" ;;
-        claude) read_tooling_value "claude_binary" "claude" ;;
-        gemini) read_tooling_value "gemini_binary" "gemini" ;;
+        codex) read_ai_cli_value "codex_binary" "codex" ;;
+        claude) read_ai_cli_value "claude_binary" "claude" ;;
+        gemini) read_ai_cli_value "gemini_binary" "gemini" ;;
         *) echo "$1" ;;
     esac
 }
@@ -174,16 +188,16 @@ get_role_cmd() {
     local provider="$2"
     local cmd
 
-    cmd=$(read_tooling_value "${provider}_${role}_cmd" "")
+    cmd=$(read_ai_cli_value "${provider}_${role}_cmd" "")
     if [ -n "$cmd" ]; then
         echo "$cmd"
         return
     fi
 
     if [ "$role" = "shogun" ]; then
-        cmd=$(read_tooling_value "${provider}_shogun_cmd" "")
+        cmd=$(read_ai_cli_value "${provider}_shogun_cmd" "")
     else
-        cmd=$(read_tooling_value "${provider}_worker_cmd" "")
+        cmd=$(read_ai_cli_value "${provider}_worker_cmd" "")
     fi
 
     if [ -n "$cmd" ]; then
@@ -607,7 +621,7 @@ if [ "$SETUP_ONLY" = false ]; then
     done
 
     if [ "$missing_cli" = true ]; then
-        echo "  config/tooling.yaml の provider 設定と CLI インストール状況をご確認ください。"
+        echo "  config/settings.yaml の ai_cli 設定と CLI インストール状況をご確認ください。"
         echo "  first_setup.sh を再実行するか、該当CLIをパスに追加してください。"
         exit 1
     fi

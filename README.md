@@ -356,7 +356,7 @@ Perfect for:
 | Karo | Default (configurable) | Enabled | Task distribution requires careful judgment |
 | Ashigaru | Default (configurable) | Enabled | Actual implementation needs full capabilities |
 
-The Shogun uses `MAX_THINKING_TOKENS=0` to disable extended thinking, reducing latency and cost while maintaining Opus-level judgment for high-level decisions. You can override providers and models per role in `config/tooling.yaml`.
+The Shogun uses `MAX_THINKING_TOKENS=0` to disable extended thinking, reducing latency and cost while maintaining Opus-level judgment for high-level decisions. You can override providers and per-role commands in the `ai_cli` section of `config/settings.yaml`.
 
 ### 📁 Context Management
 
@@ -556,35 +556,32 @@ ashigaru:
 
 ### AI CLI Provider (Role-Specific + Gemini Support)
 
-Edit `config/tooling.yaml` to switch providers and customize role-specific commands.
+Edit the `ai_cli` section in `config/settings.yaml` to switch providers and customize role-specific commands.
 
 ```yaml
-provider: codex   # claude | codex | gemini
+ai_cli:
+  provider: codex   # claude | codex | gemini
+  shogun_provider:
+  karo_provider:
+  ashigaru_provider:
 
-# Optional per-role provider overrides
-shogun_provider: claude
-karo_provider: codex
-ashigaru_provider: gemini
+  codex_binary: codex
+  codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
+  codex_karo_cmd: codex --dangerously-bypass-approvals-and-sandbox
+  codex_ashigaru_cmd: codex --dangerously-bypass-approvals-and-sandbox
 
-codex_binary: codex
-codex_shogun_cmd: codex --dangerously-bypass-approvals-and-sandbox
-codex_karo_cmd: codex --dangerously-bypass-approvals-and-sandbox
-codex_ashigaru_cmd: codex --dangerously-bypass-approvals-and-sandbox
+  claude_binary: claude
+  claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
+  claude_karo_cmd: claude --dangerously-skip-permissions
+  claude_ashigaru_cmd: claude --dangerously-skip-permissions
 
-claude_binary: claude
-claude_shogun_cmd: MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions
-claude_karo_cmd: claude --dangerously-skip-permissions
-claude_ashigaru_cmd: claude --dangerously-skip-permissions
-
-gemini_binary: gemini
-gemini_shogun_cmd: gemini --model <your-model>
-gemini_karo_cmd: gemini --model <your-model>
-gemini_ashigaru_cmd: gemini --model <your-model>
+  gemini_binary: gemini
+  gemini_shogun_cmd: gemini --model <your-model>
+  gemini_karo_cmd: gemini --model <your-model>
+  gemini_ashigaru_cmd: gemini --model <your-model>
 ```
 
-`shutsujin_departure.sh`, `first_setup.sh`, and `make start` read this file and launch the matching CLI. Customize the role-specific *_cmd values to change models or flags.
-
-Note: `config/tooling.yaml` is the active config. `config/tooling.yaml.example` is a template—copy it over if `tooling.yaml` is missing or you want to reset to the latest defaults. Changes to the example do not apply automatically.
+`shutsujin_departure.sh`, `first_setup.sh`, and `make start` read these values and launch the matching CLI. Customize the role-specific *_cmd values to change models or flags.
 
 ### Agent Guides
 
@@ -674,7 +671,7 @@ tmux attach-session -t shogun     # Connect to give commands
 tmux send-keys -t shogun:0 'codex --dangerously-bypass-approvals-and-sandbox' Enter
 tmux send-keys -t multiagent:0.0 'codex --dangerously-bypass-approvals-and-sandbox' Enter
 
-# If config/tooling.yaml sets provider: claude
+# If ai_cli.provider sets claude
 tmux send-keys -t shogun:0 'MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions' Enter
 tmux send-keys -t multiagent:0.0 'claude --dangerously-skip-permissions' Enter
 ```

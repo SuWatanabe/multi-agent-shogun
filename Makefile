@@ -27,38 +27,50 @@ DEMO_DIR := demo_output
 OUTPUT_DIR := output
 TEST_OUTPUT_DIR := test_output
 
-TOOLING_FILE := config/tooling.yaml
+SETTINGS_FILE := config/settings.yaml
 
-define read_tooling_value
-$(strip $(shell if [ -f $(TOOLING_FILE) ]; then awk -F': *' '$$1=="$(1)"{print $$2; exit}' $(TOOLING_FILE); fi))
+define read_ai_cli_value
+$(strip $(shell if [ -f $(SETTINGS_FILE) ]; then awk -v key="$(1)" '
+    /^[[:space:]]*#/ {next}
+    /^ai_cli:/ {in_cli=1; next}
+    in_cli && /^[^[:space:]]/ {in_cli=0}
+    in_cli && NF==0 {next}
+    in_cli && $$1 == key":" {
+        $$1=""
+        sub(/^[[:space:]]+/, "")
+        gsub(/[[:space:]]+$/, "")
+        print
+        exit
+    }
+' $(SETTINGS_FILE); fi))
 endef
 
-default_provider := $(call read_tooling_value,provider)
+default_provider := $(call read_ai_cli_value,provider)
 ifeq ($(default_provider),)
 	default_provider := claude
 endif
 
 role_providers := $(default_provider)
-shogun_override := $(call read_tooling_value,shogun_provider)
+shogun_override := $(call read_ai_cli_value,shogun_provider)
 ifneq ($(shogun_override),)
 	role_providers += $(shogun_override)
 endif
-karo_override := $(call read_tooling_value,karo_provider)
+karo_override := $(call read_ai_cli_value,karo_provider)
 ifneq ($(karo_override),)
 	role_providers += $(karo_override)
 endif
-ashigaru_override := $(call read_tooling_value,ashigaru_provider)
+ashigaru_override := $(call read_ai_cli_value,ashigaru_provider)
 ifneq ($(ashigaru_override),)
 	role_providers += $(ashigaru_override)
 endif
 
 role_providers := $(strip $(shell printf "%s\n" $(role_providers) | tr '[:upper:]' '[:lower:]' | sort -u))
 
-codex_binary := $(call read_tooling_value,codex_binary)
+codex_binary := $(call read_ai_cli_value,codex_binary)
 codex_binary := $(if $(codex_binary),$(codex_binary),codex)
-claude_binary := $(call read_tooling_value,claude_binary)
+claude_binary := $(call read_ai_cli_value,claude_binary)
 claude_binary := $(if $(claude_binary),$(claude_binary),claude)
-gemini_binary := $(call read_tooling_value,gemini_binary)
+gemini_binary := $(call read_ai_cli_value,gemini_binary)
 gemini_binary := $(if $(gemini_binary),$(gemini_binary),gemini)
 
 define provider_binary
