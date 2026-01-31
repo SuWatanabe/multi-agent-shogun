@@ -13,38 +13,67 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+SETTINGS_FILE="./config/settings.yaml"
+
+read_setting_value() {
+    local key="$1"
+    local default="$2"
+
+    if [ -f "$SETTINGS_FILE" ]; then
+        local value
+        value=$(grep "^${key}:" "$SETTINGS_FILE" 2>/dev/null | awk '{print $2}' || echo "")
+        if [ -n "$value" ]; then
+            echo "$value"
+            return
+        fi
+    fi
+
+    echo "$default"
+}
+
+get_ashigaru_count() {
+    local default="$1"
+
+    if [ -f "$SETTINGS_FILE" ]; then
+        local count_value
+        count_value=$(awk '
+            $1=="ashigaru:" {in_section=1; next}
+            in_section && $1=="count:" {print $2; exit}
+        ' "$SETTINGS_FILE")
+        if [ -n "$count_value" ]; then
+            echo "$count_value"
+            return
+        fi
+    fi
+
+    echo "$default"
+}
+
+normalize_ashigaru_count() {
+    local count="$1"
+    local default="$2"
+
+    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+        count="$default"
+    fi
+    if [ "$count" -lt 1 ]; then
+        count=1
+    elif [ "$count" -gt 8 ]; then
+        count=8
+    fi
+
+    echo "$count"
+}
+
 # 言語設定を読み取り（デフォルト: ja）
-LANG_SETTING="ja"
-if [ -f "./config/settings.yaml" ]; then
-    LANG_SETTING=$(grep "^language:" ./config/settings.yaml 2>/dev/null | awk '{print $2}' || echo "ja")
-fi
+LANG_SETTING=$(read_setting_value "language" "ja")
 
 # シェル設定を読み取り（デフォルト: bash）
-SHELL_SETTING="bash"
-if [ -f "./config/settings.yaml" ]; then
-    SHELL_SETTING=$(grep "^shell:" ./config/settings.yaml 2>/dev/null | awk '{print $2}' || echo "bash")
-fi
+SHELL_SETTING=$(read_setting_value "shell" "bash")
 
 # 足軽人数を読み取り（デフォルト: 8）
-ASHIGARU_COUNT="8"
-if [ -f "./config/settings.yaml" ]; then
-    COUNT_VALUE=$(awk '
-        $1=="ashigaru:" {in_section=1; next}
-        in_section && $1=="count:" {print $2; exit}
-    ' ./config/settings.yaml)
-    if [ -n "$COUNT_VALUE" ]; then
-        ASHIGARU_COUNT="$COUNT_VALUE"
-    fi
-fi
-
-if ! [[ "$ASHIGARU_COUNT" =~ ^[0-9]+$ ]]; then
-    ASHIGARU_COUNT="8"
-fi
-if [ "$ASHIGARU_COUNT" -lt 1 ]; then
-    ASHIGARU_COUNT=1
-elif [ "$ASHIGARU_COUNT" -gt 8 ]; then
-    ASHIGARU_COUNT=8
-fi
+ASHIGARU_COUNT=$(get_ashigaru_count "8")
+ASHIGARU_COUNT=$(normalize_ashigaru_count "$ASHIGARU_COUNT" "8")
 
 # 色付きログ関数（戦国風）
 log_info() {
