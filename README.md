@@ -583,6 +583,8 @@ ai_cli:
 
 `shutsujin_departure.sh`, `first_setup.sh`, and `make start` read these values and launch the matching CLI. Customize the role-specific *_cmd values to change models or flags.
 
+By default, the Gemini commands include `--sandbox --approval-mode=auto_edit`, and Ashigaru uses `--approval-mode=yolo` (which auto-approves every tool). Adjust those strings if you need a different approval model.
+
 ### Agent Guides
 
 - `AGENT_GUIDE.md`: AIに依存しない共通手順書。将軍/家老/足軽の誰でも参照できる基礎ルール集。

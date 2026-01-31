@@ -584,6 +584,8 @@ ai_cli:
 
 `shutsujin_departure.sh` / `first_setup.sh` / `make start` はこの設定を読み、選択されたCLIを自動で起動します。モデル変更や追加フラグは役割別 *_cmd に設定してください。
 
+Gemini 系のコマンドはデフォルトで `--sandbox --approval-mode=auto_edit`（足軽向けには `--approval-mode=yolo` も）を付けてあり、対話を省いて安全に動かせます。必要ならこれらの文字列を編集してください。
+
 ### エージェントガイド
 
 - `AGENT_GUIDE.md`: AIに依存しない共通ルール。将軍/家老/足軽の全員が読む想定。

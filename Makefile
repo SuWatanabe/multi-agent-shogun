@@ -38,7 +38,7 @@ $(strip $(shell if [ -f $(SETTINGS_FILE) ]; then awk -v key="$(1)" '
     in_cli && $$1 == key":" {
         $$1=""
         sub(/^[[:space:]]+/, "")
-        gsub(/[[:space:]]+$/, "")
+        gsub(/[[:space:]]+$$/, "")
         print
         exit
     }

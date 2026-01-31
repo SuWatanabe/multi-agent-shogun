@@ -109,7 +109,7 @@ read_ai_cli_value() {
                 in_cli && $1 == key":" {
                     $1=""
                     sub(/^[[:space:]]+/, "")
-                    gsub(/[[:space:]]+$/, "")
+                    gsub(/[[:space:]]+$$/, "")
                     print
                     exit
                 }
