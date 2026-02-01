@@ -44,7 +44,7 @@
       ASHIGARU
 ```
 
-※ 足軽の人数は `config/settings.yaml` の `ashigaru.count` で変更できます（デフォルト8）。
+※ 足軽の人数（合計）は `config/settings.yaml` の `ashigaru.llm_counts` で変更できます（デフォルト8、合計1-8推奨）。旧 `ashigaru.count` も引き続き利用可能です。
 
 ---
 
@@ -546,13 +546,26 @@ language: ja   # 日本語のみ
 language: en   # 日本語 + 英訳併記
 ```
 
-### 足軽の人数設定
+### 足軽の人数設定（プロバイダ別）
 
-`config/settings.yaml` で足軽数を変更できます：
+`config/settings.yaml` で足軽数（LLMプロバイダ別）を変更できます（合計1-8推奨）：
 
 ```yaml
 ashigaru:
-  count: 8  # 1-8 推奨（tmuxの3x3レイアウト前提）
+  llm_counts:
+    gemini: 2
+    codex: 2
+    claude: 0
+```
+
+プロバイダ別のCLIコマンドも指定できます：
+
+```yaml
+ashigaru:
+  provider_commands:
+    gemini: "gemini --model gemini-1.5-pro-latest --sandbox --approval-mode=yolo"
+    codex: "codex --dangerously-bypass-approvals-and-sandbox"
+    claude: "claude --dangerously-skip-permissions"
 ```
 
 ### AI CLI プロバイダ（役割別 + Gemini対応）

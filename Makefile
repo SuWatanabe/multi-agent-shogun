@@ -30,18 +30,18 @@ TEST_OUTPUT_DIR := test_output
 SETTINGS_FILE := config/settings.yaml
 
 define read_ai_cli_value
-$(strip $(shell if [ -f $(SETTINGS_FILE) ]; then awk -v key="$(1)" '
-    /^[[:space:]]*#/ {next}
-    /^ai_cli:/ {in_cli=1; next}
-    in_cli && /^[^[:space:]]/ {in_cli=0}
-    in_cli && NF==0 {next}
-    in_cli && $$1 == key":" {
-        $$1=""
-        sub(/^[[:space:]]+/, "")
-        gsub(/[[:space:]]+$$/, "")
-        print
-        exit
-    }
+$(strip $(shell if [ -f $(SETTINGS_FILE) ]; then awk -v key="$(1)" ' \
+    /^[[:space:]]*#/ {next}; \
+    /^ai_cli:/ {in_cli=1; next}; \
+    in_cli && /^[^[:space:]]/ {in_cli=0}; \
+    in_cli && NF==0 {next}; \
+    in_cli && $$1 == key":" { \
+        $$1=""; \
+        sub(/^[[:space:]]+/, ""); \
+        gsub(/[[:space:]]+$$/, ""); \
+        print; \
+        exit; \
+    } \
 ' $(SETTINGS_FILE); fi))
 endef
 

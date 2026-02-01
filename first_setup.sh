@@ -57,18 +57,18 @@ read_ai_cli_value() {
 
     if [ -f "$SETTINGS_FILE" ]; then
         value=$(
-            awk -v key="$key" '
-                /^[[:space:]]*#/ {next}
-                /^ai_cli:/ {in_cli=1; next}
-                in_cli && /^[^[:space:]]/ {in_cli=0}
-                in_cli && NF==0 {next}
-                in_cli && $1 == key":" {
-                    $1=""
-                    sub(/^[[:space:]]+/, "")
-                    gsub(/[[:space:]]+$/, "")
-                    print
-                    exit
-                }
+            awk -v key="$key" ' \
+                /^[[:space:]]*#/ {next}; \
+                /^ai_cli:/ {in_cli=1; next}; \
+                in_cli && /^[^[:space:]]/ {in_cli=0}; \
+                in_cli && NF==0 {next}; \
+                in_cli && $1 == key":" { \
+                    $1=""; \
+                    sub(/^[[:space:]]+/, ""); \
+                    gsub(/[[:space:]]+$/, ""); \
+                    print; \
+                    exit; \
+                } \
             ' "$SETTINGS_FILE"
         )
     fi
@@ -118,15 +118,46 @@ get_provider_binary() {
 get_ashigaru_count() {
     local count="8"
     local settings_file="$SCRIPT_DIR/config/settings.yaml"
+    local total=0
+    local counts_found=false
 
     if [ -f "$settings_file" ]; then
-        local value
-        value=$(awk '
-            $1=="ashigaru:" {in_section=1; next}
-            in_section && $1=="count:" {print $2; exit}
+        while read -r _provider value; do
+            counts_found=true
+            if [[ "$value" =~ ^[0-9]+$ ]] && [ "$value" -gt 0 ]; then
+                total=$((total + value))
+            fi
+        done < <(awk '
+            /^[[:space:]]*#/ {next}
+            /^ashigaru:/ {in_ash=1; next}
+            in_ash && /^[^[:space:]]/ {in_ash=0; in_counts=0}
+            in_ash && /^[[:space:]]*llm_counts:/ {in_counts=1; next}
+            in_counts && /^[[:space:]]*provider_commands:/ {in_counts=0; next}
+            in_counts {
+                line=$0
+                sub(/^[[:space:]]*/, "", line)
+                gsub(/#.*/, "", line)
+                if (line ~ /^[^:]+:[[:space:]]*[0-9]+/) {
+                    split(line, a, ":")
+                    provider=a[1]
+                    value=a[2]
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+                    print provider, value
+                }
+            }
         ' "$settings_file")
-        if [ -n "$value" ]; then
-            count="$value"
+
+        if [ "$counts_found" = true ] && [ "$total" -gt 0 ]; then
+            count="$total"
+        else
+            local value
+            value=$(awk '
+                $1=="ashigaru:" {in_section=1; next}
+                in_section && $1=="count:" {print $2; exit}
+            ' "$settings_file")
+            if [ -n "$value" ]; then
+                count="$value"
+            fi
         fi
     fi
 
@@ -534,10 +565,19 @@ ai_cli:
   gemini_karo_cmd: gemini
   gemini_ashigaru_cmd: gemini
 
-# 足軽人数設定
+# 足軽人数設定（LLMプロバイダー別）
 # 1-8 推奨（tmuxの分割レイアウト前提）
 ashigaru:
-  count: 8
+  llm_counts:
+    gemini: 2
+    codex: 2
+    claude: 0
+
+  # 各LLMプロバイダーに対応するCLIコマンドを定義します。
+  provider_commands:
+    gemini: "gemini --model gemini-1.5-pro-latest --sandbox --approval-mode=yolo"
+    codex: "codex --dangerously-bypass-approvals-and-sandbox"
+    claude: "claude --dangerously-skip-permissions"
 
 # スキル設定
 skill:

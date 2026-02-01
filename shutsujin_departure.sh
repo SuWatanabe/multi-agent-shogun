@@ -14,6 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 SETTINGS_FILE="./config/settings.yaml"
+MAX_ASHIGARU=8
 
 read_setting_value() {
     local key="$1"
@@ -31,7 +32,7 @@ read_setting_value() {
     echo "$default"
 }
 
-get_ashigaru_count() {
+get_ashigaru_count_legacy() {
     local default="$1"
 
     if [ -f "$SETTINGS_FILE" ]; then
@@ -58,11 +59,63 @@ normalize_ashigaru_count() {
     fi
     if [ "$count" -lt 1 ]; then
         count=1
-    elif [ "$count" -gt 8 ]; then
-        count=8
+    elif [ "$count" -gt "$MAX_ASHIGARU" ]; then
+        count="$MAX_ASHIGARU"
     fi
 
     echo "$count"
+}
+
+read_ashigaru_llm_counts() {
+    if [ -f "$SETTINGS_FILE" ]; then
+        awk '
+            /^[[:space:]]*#/ {next}
+            /^ashigaru:/ {in_ash=1; next}
+            in_ash && /^[^[:space:]]/ {in_ash=0; in_counts=0}
+            in_ash && /^[[:space:]]*llm_counts:/ {in_counts=1; next}
+            in_counts && /^[[:space:]]*provider_commands:/ {in_counts=0; next}
+            in_counts {
+                line=$0
+                sub(/^[[:space:]]*/, "", line)
+                gsub(/#.*/, "", line)
+                if (line ~ /^[^:]+:[[:space:]]*[0-9]+/) {
+                    split(line, a, ":")
+                    provider=a[1]
+                    count=a[2]
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", count)
+                    print provider, count
+                }
+            }
+        ' "$SETTINGS_FILE"
+    fi
+}
+
+read_ashigaru_provider_cmd() {
+    local provider="$1"
+
+    if [ -f "$SETTINGS_FILE" ]; then
+        awk -v target="$provider" '
+            /^[[:space:]]*#/ {next}
+            /^ashigaru:/ {in_ash=1; next}
+            in_ash && /^[^[:space:]]/ {in_ash=0; in_cmds=0}
+            in_ash && /^[[:space:]]*provider_commands:/ {in_cmds=1; next}
+            in_cmds {
+                line=$0
+                sub(/^[[:space:]]*/, "", line)
+                gsub(/#.*/, "", line)
+                if (line ~ /^[^:]+:/) {
+                    split(line, a, ":")
+                    key=a[1]
+                    if (key == target) {
+                        cmd=line
+                        sub(/^[^:]+:[[:space:]]*/, "", cmd)
+                        gsub(/^[[:space:]]+|[[:space:]]+$/, "", cmd)
+                        if (cmd != "") { print cmd; exit }
+                    }
+                }
+            }
+        ' "$SETTINGS_FILE"
+    fi
 }
 
 # 言語設定を読み取り（デフォルト: ja）
@@ -70,12 +123,6 @@ LANG_SETTING=$(read_setting_value "language" "ja")
 
 # シェル設定を読み取り（デフォルト: bash）
 SHELL_SETTING=$(read_setting_value "shell" "bash")
-
-SETTINGS_FILE="./config/settings.yaml"
-
-# 足軽人数を読み取り（デフォルト: 8）
-ASHIGARU_COUNT=$(get_ashigaru_count "8")
-ASHIGARU_COUNT=$(normalize_ashigaru_count "$ASHIGARU_COUNT" "8")
 
 # 色付きログ関数（戦国風）
 log_info() {
@@ -130,18 +177,18 @@ read_ai_cli_value() {
 
     if [ -f "$SETTINGS_FILE" ]; then
         value=$(
-            awk -v key="$key" '
-                /^[[:space:]]*#/ {next}
-                /^ai_cli:/ {in_cli=1; next}
-                in_cli && /^[^[:space:]]/ {in_cli=0}
-                in_cli && NF==0 {next}
-                in_cli && $1 == key":" {
-                    $1=""
-                    sub(/^[[:space:]]+/, "")
-                    gsub(/[[:space:]]+$$/, "")
-                    print
-                    exit
-                }
+            awk -v key="$key" ' \
+                /^[[:space:]]*#/ {next}; \
+                /^ai_cli:/ {in_cli=1; next}; \
+                in_cli && /^[^[:space:]]/ {in_cli=0}; \
+                in_cli && NF==0 {next}; \
+                in_cli && $1 == key":" { \
+                    $1=""; \
+                    sub(/^[[:space:]]+/, ""); \
+                    gsub(/[[:space:]]+$$/, ""); \
+                    print; \
+                    exit; \
+                } \
             ' "$SETTINGS_FILE"
         )
     fi
@@ -251,7 +298,111 @@ ASHIGARU_BINARY=$(get_provider_binary "$ASHIGARU_PROVIDER")
 
 SHOGUN_CLI_CMD=$(get_role_cmd "shogun" "$SHOGUN_PROVIDER")
 KARO_CLI_CMD=$(get_role_cmd "karo" "$KARO_PROVIDER")
-ASHIGARU_CLI_CMD=$(get_role_cmd "ashigaru" "$ASHIGARU_PROVIDER")
+
+ASHIGARU_PROVIDERS=()
+ASHIGARU_CMDS=()
+ASHIGARU_LABELS=()
+
+sanitize_cmd() {
+    local cmd="$1"
+    if [[ "$cmd" =~ ^\".*\"$ ]]; then
+        cmd="${cmd#\"}"
+        cmd="${cmd%\"}"
+    elif [[ "$cmd" =~ ^\'.*\'$ ]]; then
+        cmd="${cmd#\'}"
+        cmd="${cmd%\'}"
+    fi
+    echo "$cmd"
+}
+
+build_ashigaru_assignments() {
+    local total=0
+    local counts_found=false
+
+    while read -r provider count; do
+        if [ -z "$provider" ]; then
+            continue
+        fi
+        counts_found=true
+        provider=$(normalize_provider "$provider")
+        if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+            continue
+        fi
+        if [ "$count" -le 0 ]; then
+            continue
+        fi
+        for _ in $(seq 1 "$count"); do
+            if [ "$total" -ge "$MAX_ASHIGARU" ]; then
+                break
+            fi
+            ASHIGARU_PROVIDERS+=("$provider")
+            total=$((total + 1))
+        done
+        if [ "$total" -ge "$MAX_ASHIGARU" ]; then
+            break
+        fi
+    done < <(read_ashigaru_llm_counts)
+
+    if [ "$counts_found" = false ] || [ "$total" -eq 0 ]; then
+        total=$(get_ashigaru_count_legacy "8")
+        total=$(normalize_ashigaru_count "$total" "8")
+        ASHIGARU_PROVIDERS=()
+        for _ in $(seq 1 "$total"); do
+            ASHIGARU_PROVIDERS+=("$ASHIGARU_PROVIDER")
+        done
+    fi
+
+    ASHIGARU_COUNT="$total"
+
+    ASHIGARU_CMDS=()
+    ASHIGARU_LABELS=()
+    for provider in "${ASHIGARU_PROVIDERS[@]}"; do
+        local cmd
+        cmd=$(read_ashigaru_provider_cmd "$provider")
+        cmd=$(sanitize_cmd "$cmd")
+        if [ -z "$cmd" ]; then
+            cmd=$(get_role_cmd "ashigaru" "$provider")
+        fi
+        ASHIGARU_CMDS+=("$cmd")
+        ASHIGARU_LABELS+=("$(get_provider_label "$provider")")
+    done
+}
+
+build_ashigaru_provider_summary() {
+    local summary=""
+    local providers=()
+    local counts=()
+    local idx
+
+    for provider in "${ASHIGARU_PROVIDERS[@]}"; do
+        local found=false
+        for idx in "${!providers[@]}"; do
+            if [ "${providers[$idx]}" = "$provider" ]; then
+                counts[$idx]=$((counts[$idx] + 1))
+                found=true
+                break
+            fi
+        done
+        if [ "$found" = false ]; then
+            providers+=("$provider")
+            counts+=("1")
+        fi
+    done
+
+    for idx in "${!providers[@]}"; do
+        local label
+        label=$(get_provider_label "${providers[$idx]}")
+        if [ -n "$summary" ]; then
+            summary+=", "
+        fi
+        summary+="${label}×${counts[$idx]}"
+    done
+
+    echo "$summary"
+}
+
+build_ashigaru_assignments
+ASHIGARU_PROVIDER_SUMMARY=$(build_ashigaru_provider_summary)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # オプション解析
@@ -631,7 +782,7 @@ echo ""
 if [ "$SETUP_ONLY" = false ]; then
     missing_cli=false
     unique_providers=()
-    for provider in "$SHOGUN_PROVIDER" "$KARO_PROVIDER" "$ASHIGARU_PROVIDER"; do
+    for provider in "$SHOGUN_PROVIDER" "$KARO_PROVIDER" "${ASHIGARU_PROVIDERS[@]}"; do
         if [ -z "$provider" ]; then
             continue
         fi
@@ -655,7 +806,7 @@ if [ "$SETUP_ONLY" = false ]; then
         exit 1
     fi
 
-    log_war "👑 AI CLI を召喚中 (shogun: ${SHOGUN_PROVIDER_LABEL}, karo: ${KARO_PROVIDER_LABEL}, ashigaru: ${ASHIGARU_PROVIDER_LABEL})..."
+    log_war "👑 AI CLI を召喚中 (shogun: ${SHOGUN_PROVIDER_LABEL}, karo: ${KARO_PROVIDER_LABEL}, ashigaru: ${ASHIGARU_PROVIDER_SUMMARY})..."
 
     # 将軍
     tmux send-keys -t shogun "$SHOGUN_CLI_CMD"
@@ -672,7 +823,8 @@ if [ "$SETUP_ONLY" = false ]; then
 
     # 足軽
     for i in $(seq 1 "$ASHIGARU_COUNT"); do
-        tmux send-keys -t "multiagent:0.$i" "$ASHIGARU_CLI_CMD"
+        cmd="${ASHIGARU_CMDS[$((i - 1))]}"
+        tmux send-keys -t "multiagent:0.$i" "$cmd"
         tmux send-keys -t "multiagent:0.$i" Enter
     done
     log_info "  └─ 足軽、召喚完了"
@@ -786,11 +938,11 @@ if [ "$SETUP_ONLY" = true ]; then
     echo "  │  # 家老を召喚                                            │"
     echo "  │  tmux send-keys -t multiagent:0.0 '$KARO_CLI_CMD' Enter"
     echo "  │                                                          │"
-    echo "  │  # 足軽を一斉召喚                                         │"
-    echo "  │  for i in {1..${ASHIGARU_COUNT}}; do \\                   │"
-    echo "  │    tmux send-keys -t multiagent:0.\$i \\                   │"
-    echo "  │      '$ASHIGARU_CLI_CMD' Enter                           │"
-    echo "  │  done                                                    │"
+    echo "  │  # 足軽を召喚                                             │"
+    for i in $(seq 1 "$ASHIGARU_COUNT"); do
+        cmd="${ASHIGARU_CMDS[$((i - 1))]}"
+        echo "  │  tmux send-keys -t multiagent:0.${i} '$cmd' Enter        │"
+    done
     echo "  └──────────────────────────────────────────────────────────┘"
     echo ""
 fi

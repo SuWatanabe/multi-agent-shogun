@@ -11,10 +11,22 @@ language: ja
 # zsh: zsh用プロンプト
 shell: bash
 
-# 足軽人数設定
+# 足軽人数設定（LLMプロバイダー別）
 # 1-8 推奨（tmuxの分割レイアウト前提）
 ashigaru:
-  count: 8
+  llm_counts:
+    gemini: 2
+    codex: 2
+    claude: 0
+    # 他のLLMプロバイダーを追加する場合はここに記述
+
+  # 各LLMプロバイダーに対応するCLIコマンドを定義します。
+  # ここで定義されたコマンドが足軽の起動時に使用されます。
+  provider_commands:
+    gemini: "gemini --model gemini-1.5-pro-latest --sandbox --approval-mode=yolo"
+    codex: "codex --dangerously-bypass-approvals-and-sandbox"
+    claude: "claude --dangerously-skip-permissions"
+    # 別のLLMプロバイダーを追加する場合はここに記述
 
 # スキル設定
 skill:

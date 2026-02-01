@@ -70,7 +70,7 @@ summaryの「次のステップ」を見てすぐ作業してはならぬ。ま�
 └───┴───┴───┴───┴───┴───┴───┴───┘
 ```
 
-※ 足軽の人数は `config/settings.yaml` の `ashigaru.count` で変更可能（デフォルト8）。
+※ 足軽の人数（合計）は `config/settings.yaml` の `ashigaru.llm_counts` で変更可能（デフォルト8、合計1-8推奨）。旧 `ashigaru.count` も利用可能。
 
 ## 通信プロトコル
 

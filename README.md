@@ -44,7 +44,7 @@
         ASHIGARU
 ```
 
-Default is 8 Ashigaru, configurable via `config/settings.yaml` (`ashigaru.count`).
+Default is 8 Ashigaru total, configurable via `config/settings.yaml` (`ashigaru.llm_counts` sum; legacy `ashigaru.count` still works).
 
 ---
 
@@ -545,13 +545,26 @@ language: ja   # Japanese only
 language: en   # Japanese + English translation
 ```
 
-### Ashigaru Count
+### Ashigaru Count (Per Provider)
 
-Edit `config/settings.yaml` to control how many Ashigaru workers are created:
+Edit `config/settings.yaml` to control how many Ashigaru workers are created per LLM provider (total 1-8 recommended):
 
 ```yaml
 ashigaru:
-  count: 8  # 1-8 recommended (tmux layout assumes 3x3 grid)
+  llm_counts:
+    gemini: 2
+    codex: 2
+    claude: 0
+```
+
+You can also set provider-specific CLI commands:
+
+```yaml
+ashigaru:
+  provider_commands:
+    gemini: "gemini --model gemini-1.5-pro-latest --sandbox --approval-mode=yolo"
+    codex: "codex --dangerously-bypass-approvals-and-sandbox"
+    claude: "claude --dangerously-skip-permissions"
 ```
 
 ### AI CLI Provider (Role-Specific + Gemini Support)
